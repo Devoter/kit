@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/go-kit/kit/endpoint"
@@ -75,13 +76,15 @@ func PublisherTimeout(timeout time.Duration) PublisherOption {
 
 // Endpoint returns a usable endpoint that invokes the remote endpoint.
 func (p Publisher) Endpoint() endpoint.Endpoint {
+	rpc := reflect.ValueOf(p.deliverer).Pointer() == reflect.ValueOf(SendAndForgetDeliverer).Pointer()
+
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		ctx, cancel := context.WithTimeout(ctx, p.timeout)
 		defer cancel()
 
-		pub := amqp.Publishing{
-			ReplyTo:       p.q.Name,
-			CorrelationId: randomString(randInt(5, maxCorrelationIdLength)),
+		pub := amqp.Publishing{CorrelationId: randomString(randInt(5, maxCorrelationIdLength))}
+		if rpc {
+			pub.ReplyTo = p.q.Name
 		}
 
 		if err := p.enc(ctx, &pub, request); err != nil {
